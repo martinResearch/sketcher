@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Drawing with Zoom, Translate, SVG Export, and Control Points</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            cursor: grab;
+        }
+
+        #scaleIndicator {
+            margin-top: 10px;
+        }
+
+        #controlPointsToggle,
+        #colorSelector,
+        #radiusSelector {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="vectorCanvas" width="800" height="600"></canvas>
+    <div id="scaleIndicator">Scale: 1</div>
+    <button id="exportButton">Export as SVG</button>
+    <button id="controlPointsToggle">Toggle Control Points</button>
+
+    <!-- Color Selector -->
+    <label for="colorSelector">Color:</label>
+    <input type="color" id="colorSelector" value="#000000">
+
+    <!-- Radius Selector -->
+    <label for="radiusSelector">Radius:</label>
+    <input type="number" id="radiusSelector" min="1" max="20" value="5">
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const canvas = document.getElementById("vectorCanvas");
+            const context = canvas.getContext("2d");
+            const scaleIndicator = document.getElementById("scaleIndicator");
+            const exportButton = document.getElementById("exportButton");
+            const controlPointsToggle = document.getElementById("controlPointsToggle");
+            const colorSelector = document.getElementById("colorSelector");
+            const radiusSelector = document.getElementById("radiusSelector");
+            let isDrawing = false;
+            let isTranslating = false;
+            let showControlPoints = false;
+            let curves = [];
+            let colors = [];
+            let radii = [];
+            let currentCurve = [];
+            let zoomFactor = 1;
+            let translateX = 0;
+            let translateY = 0;
+            let mouseX = 0;
+            let mouseY = 0;
+            let selectedControlPoint = null;
+            let currentColor = "#000000";  // Default color
+            let currentRadius = 5;  // Default radius
+
+            function startDrawing(e) {
+                e.preventDefault();
+                const x = (e.clientX || e.touches[0].clientX) - canvas.offsetLeft - translateX;
+                const y = (e.clientY || e.touches[0].clientY) - canvas.offsetTop - translateY;
+
+                if ((e.button === 0 || e.touches) && !showControlPoints) {  // Left mouse button or touch
+                    isDrawing = true;
+                    currentCurve = [];
+                    addPoint(x, y);
+                } else if (e.button === 2 && showControlPoints) {  // Right mouse button and control points are visible
+                    // Find the nearest control point
+                    selectedControlPoint = findNearestControlPoint(x, y);
+                } else if (e.button === 2) {  // Right mouse button
+                    isTranslating = true;
+                    mouseX = x;
+                    mouseY = y;
+                    canvas.style.cursor = "grabbing";
+                }
+            }
+
+            function findNearestControlPoint(x, y) {
+                let nearestControlPoint = null;
+                let minDistance = Infinity;
+
+                for (let curve_idx = 0; curve_idx < curves.length; curve_idx++) {
+                    const curve = curves[curve_idx];
+                    for (let point_idx = 1; point_idx < curve.length - 1; point_idx += 3) {
+                        const distance = Math.sqrt((curve[point_idx].x - x) ** 2 + (curve[point_idx].y - y) ** 2);
+
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            nearestControlPoint = { curve_idx, point_idx };
+                        }
+                    }
+                }
+
+                return nearestControlPoint;
+            }
+
+			
+
+            function addPoint(x, y) {
+                const scaledX = x / zoomFactor;
+                const scaledY = y / zoomFactor;
+                currentCurve.push({ x: scaledX, y: scaledY });
+            }
+
+            function drawCurve(curve, color, radius) {
+                if (curve.length < 4) return;
+				context.beginPath();
+                context.moveTo(curve[0].x, curve[0].y);
+
+                context.strokeStyle = color;
+                context.lineWidth = radius * 2;
+
+                for (let i = 1; i < curve.length - 2; i += 3) {
+                    context.bezierCurveTo(
+                        curve[i].x, curve[i].y,
+                        curve[i + 1].x, curve[i + 1].y,
+                        curve[i + 2].x, curve[i + 2].y
+                    );
+                }
+
+                context.stroke();
+
+                if (showControlPoints) {
+                    for (let i = 1; i < curve.length - 1; i += 1) {
+                        context.beginPath();
+                        if (selectedControlPoint && selectedControlPoint.curve_idx === curves.indexOf(curve) && selectedControlPoint.point_idx === i) {
+                            context.arc(curve[i].x, curve[i].y, radius, 0, 2 * Math.PI);
+                            context.fillStyle = "green";  // Draw selected control point in green
+                        } else {
+                            context.arc(curve[i].x, curve[i].y, radius, 0, 2 * Math.PI);
+                            context.fillStyle = color;
+                        }
+                        context.fill();
+                        context.stroke();
+                    }
+                }
+            }
+
+            function draw() {
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                context.save();
+
+                if (isTranslating) {
+                    const deltaX = (mouseX - canvas.offsetLeft - translateX) / zoomFactor;
+                    const deltaY = (mouseY - canvas.offsetTop - translateY) / zoomFactor;
+
+                    // Clear the canvas if translating to avoid overlapping
+                    context.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Apply translation
+                    context.translate(deltaX, deltaY);
+                }
+
+                // Apply scaling
+                context.scale(zoomFactor, zoomFactor);
+
+                for (let i = 0; i < curves.length; i++) {
+                    drawCurve(curves[i], colors[i], radii[i]);
+                }
+
+                if (isDrawing) {
+                    drawCurve(currentCurve, currentColor, currentRadius);
+                }
+
+                context.restore();
+
+                // Update the scale indicator
+                scaleIndicator.textContent = `Scale: ${zoomFactor.toFixed(2)}`;
+            }
+
+            function handleWheel(e) {
+                e.preventDefault();
+                const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                zoomFactor *= scaleFactor;
+                draw();
+            }
+
+            function handleMouseMove(x, y) {
+                const deltaX = (x - mouseX) / zoomFactor;
+                const deltaY = (y - mouseY) / zoomFactor;
+                translateX += deltaX;
+                translateY += deltaY;
+                mouseX = x;
+                mouseY = y;
+                draw();
+            }
+
+            function stopDrawing() {
+                isDrawing = false;
+                if (currentCurve.length > 1) {
+                    curves.push(currentCurve);
+                    colors.push(currentColor);
+                    radii.push(currentRadius);
+                    currentCurve = [];
+                }
+                draw();
+            }
+
+            function stopTranslating() {
+                isTranslating = false;
+                canvas.style.cursor = "grab";
+            }
+
+            function exportSVG() {
+                const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">' +
+                            curves.map(curve =>
+                                `<path d="M${curve[0].x} ${curve[0].y} C${curve.slice(1).map(point => `${point.x} ${point.y}`).join(', ')}" fill="none" stroke="${currentColor}" stroke-width="${currentRadius * 2}" />`
+                            ).join('') +
+                            '</svg>';
+
+                const blob = new Blob([svg], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'drawing.svg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            function toggleControlPoints() {
+                showControlPoints = !showControlPoints;
+                draw();
+            }
+
+            // Event listeners for both mouse and touch events
+            canvas.addEventListener("mousedown", startDrawing);
+            canvas.addEventListener("mouseup", function(e) {
+                if ((e.button === 0 || e.touches) && !showControlPoints) {  // Left mouse button or touch
+                    stopDrawing();
+                } else if (e.button === 2) {  // Right mouse button
+                    stopTranslating();
+                }
+            });
+            canvas.addEventListener("mousemove", function(e) {
+                const x = (e.clientX || e.touches[0].clientX) - canvas.offsetLeft - translateX;
+                const y = (e.clientY || e.touches[0].clientY) - canvas.offsetTop - translateY;
+
+                if (isDrawing) {
+                    addPoint(x, y);
+                    draw();
+                } else if (isTranslating) {
+                    handleMouseMove(x, y);
+                }
+            });
+            canvas.addEventListener("contextmenu", function(e) {
+                e.preventDefault();  // Prevent the context menu from appearing on right-click
+            });
+            canvas.addEventListener("wheel", handleWheel);
+            canvas.addEventListener("touchstart", startDrawing);
+            canvas.addEventListener("touchend", function(e) {
+                if (e.touches.length === 0) {  // No more touches
+                    stopDrawing();
+                }
+            });
+            canvas.addEventListener("touchmove", function(e) {
+                const x = e.touches[0].clientX - canvas.offsetLeft - translateX;
+                const y = e.touches[0].clientY - canvas.offsetTop - translateY;
+
+                if (isDrawing) {
+                    addPoint(x, y);
+                    draw();
+                } else if (isTranslating) {
+                    handleMouseMove(x, y);
+                }
+            });
+
+            // Event listener for the color selector
+            colorSelector.addEventListener("input", function() {
+                currentColor = colorSelector.value;
+            });
+
+            // Event listener for the radius selector
+            radiusSelector.addEventListener("input", function() {
+                currentRadius = parseInt(radiusSelector.value, 10);
+            });
+
+            // Event listener for the export button
+            exportButton.addEventListener("click", exportSVG);
+
+            // Event listener for the control points toggle button
+            controlPointsToggle.addEventListener("click", toggleControlPoints);
+        });
+    </script>
+</body>
+</html>
