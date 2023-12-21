@@ -1,5 +1,7 @@
 
 function fitCircleToPolylineInit(points) {
+    // Estimate the parameters  of the circle that best fits a set of points
+    // using a close form formula
     const A = math.concat(
         points.map(point => [point.x, point.y, 1]),
         0
@@ -17,6 +19,9 @@ function fitCircleToPolylineInit(points) {
 
 
 function fitCircleToPolyline(polyline) {
+    // Estimatthe e the parameters  of the circle that best fits a set of points
+    // trough iterative minimization of the point to circle squared distances
+
     const initialGuess = fitCircleToPolylineInit(polyline)
     // Define the objective function to minimize
     const residuals_fun = params => {
@@ -47,33 +52,6 @@ function fitCircleToPolyline(polyline) {
 
     return { cx, cy, r };
 }
-
-function fitSquareToPoints(points) {
-    const xValues = points.map(point => point.x);
-    const yValues = points.map(point => point.y);
-
-    const initialGuess = [
-        math.mean(xValues),
-        math.mean(yValues),
-        math.max(math.abs(xValues - math.mean(xValues))) / 2
-    ];
-
-    const result = math.nlp.optimize({
-        objective: function (params) {
-            const [cx, cy, halfSide] = params;
-            const residuals = points.map(point => Math.abs(point.x - cx) - halfSide).concat(
-                points.map(point => Math.abs(point.y - cy) - halfSide)
-            );
-            return math.norm(residuals, 2); // L2 norm (Euclidean norm)
-        },
-        x0: initialGuess,
-        method: 'levenberg-marquardt'
-    });
-
-    const [cx, cy, halfSide] = result.x;
-    return { cx, cy, sideLength: 2 * halfSide };
-}
-
 
 
 function calculateNonCenteredMoments(polygon) {
@@ -126,12 +104,6 @@ function calculateCenteredMoments(polygon) {
 
     return { centerX, centerY, mu20: centeredMu20, mu02: centeredMu02, mu11: centeredMu11 };
 }
-
-
-
-
-
-
 
 function calculateAngleBetweenSegments(segment1, segment2) {
     const vector1 = [segment1[1].x - segment1[0].x, segment1[1].y - segment1[0].y];
@@ -250,7 +222,7 @@ function detectConstraintsCandidates(polygon) {
                 cost = distance / distance_tolerance
                 if (cost < 1) {
                     detected_constraints.push({ type: "point_point_contact", cost, i, j })
-                    point_point_contacts.add((i * numVertices + j))
+                    point_point_contacts.add((i, j))
                 }
             }
         }
@@ -262,7 +234,7 @@ function detectConstraintsCandidates(polygon) {
             if ((i == j) || (i == j + 1)) {
                 continue
             }
-            if ((point_point_contacts.has((i, j))) || (point_point_contacts.has((i, j + 1))) || (point_point_contacts.has((j, i))) || (point_point_contacts.has((j, i + 1)))) {
+            if ((point_point_contacts.has((i, j))) || (point_point_contacts.has((i, j + 1))) || (point_point_contacts.has((j, i))) || (point_point_contacts.has((j+1, i )))) {
                 continue
             }
 
@@ -415,6 +387,10 @@ document.addEventListener("DOMContentLoaded", function () {
     let radii = [];
     let constraints = [];
     let currentConstraints = [];
+
+    // coordinate of point in screen canvas given coordinates (x,y) in image space is
+    // zoomFactor * x + translateX, zoomFactor *y + translateY
+
     let zoomFactor = 1;
     let translateX = 0;
     let translateY = 0;
@@ -440,7 +416,7 @@ document.addEventListener("DOMContentLoaded", function () {
             isDrawing = true;
             currentCurve = [];
             addPoint(x, y);
-        } else if (e.button === 0 && showControlPoints) {  // Right mouse button and control points are visible
+        } else if ((e.button === 0 || e.touches) && showControlPoints) {  // Right mouse button and control points are visible
             // Find the nearest control point
             isEditing = true
             selectedControlPoint = findNearestControlPoint(x, y);
@@ -470,11 +446,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             }
         }
-
         return nearestControlPoint;
     }
-
-
 
     function addPoint(x, y) {
         const scaledX = x / zoomFactor;
@@ -619,12 +592,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 throw "unknown constraint type";
 
         }
-
-
-
-
-
-
     }
 
     function displayCurrentConstraints() {
@@ -666,6 +633,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Apply scaling
         context.scale(zoomFactor, zoomFactor);
+
 
         for (let i = 0; i < curves.length; i++) {
             drawCurve(curves[i], colors[i], radii[i]);
@@ -833,8 +801,13 @@ document.addEventListener("DOMContentLoaded", function () {
     canvas.addEventListener("touchstart", startDrawing);
     canvas.addEventListener("touchend", function (e) {
         if (e.touches.length === 0) {  // No more touches
+            if (isDrawing){
             stopDrawing();
+            }
+            else if (isEditing)
+            {
             stopEditing();
+            }
         }
     });
     canvas.addEventListener("touchmove", function (e) {
@@ -846,6 +819,9 @@ document.addEventListener("DOMContentLoaded", function () {
             draw();
         } else if (isTranslating) {
             handleMouseMove(x, y);
+        }
+        else if (isEditing) {
+            handleMouseMoveEditing(x, y);
         }
     });
 
