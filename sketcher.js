@@ -141,109 +141,158 @@ function calculatePointToPointDistance(point1, point2) {
 
 
 
-function detectConstraintsCandidates(polygon) {
-
-    const numVertices = polygon.length;
-    angle_tolerance = 10
-    distance_tolerance = 10
+function detectConstraintsCandidates(curves) {
+    NUM_MAX_VERTICES = 10000
     detected_constraints = []
-
-    // detect horizontal and vertical constraints
-    vertical_vector = [{ x: 0, y: 0 }, { x: 0, y: 1 }]
     segments_with_angle_constraints = new Set();
-    for (let i = 0; i < numVertices - 1; i++) {
-        const segment = [polygon[i], polygon[i + 1]];
-        angle = calculateAngleBetweenSegments(segment, vertical_vector)
-        cost = Math.min(Math.abs(angle), Math.abs(angle - 180))
-        if (cost < angle_tolerance) {
-            detected_constraints.push({ type: "vertical", cost, i })
-            segments_with_angle_constraints.add(i)
+    for (let curve_idx = 0; curve_idx < curves.length; curve_idx++) {
+        polygon = curves[curve_idx];
+        const numVertices = polygon.length;
+        angle_tolerance = 10;
+        distance_tolerance = 10;
+        relative_distance_tolerance = 0.05;
 
-        }
-        cost = Math.abs(Math.abs(angle) - 90)
-        if (cost < angle_tolerance) {
-            detected_constraints.push({ type: "horizontal", cost, i })
-            segments_with_angle_constraints.add(i)
+
+        // detect horizontal and vertical constraints
+        vertical_vector = [{ x: 0, y: 0 }, { x: 0, y: 1 }]
+        
+        for (let i = 0; i < numVertices - 1; i++) {
+            const segment = [polygon[i], polygon[i + 1]];
+            angle = calculateAngleBetweenSegments(segment, vertical_vector)
+            cost = Math.min(Math.abs(angle), Math.abs(angle - 180))
+            if (cost < angle_tolerance) {
+                detected_constraints.push({ type: "vertical", curve_idx, i })
+                segments_with_angle_constraints.add(curve_idx * NUM_MAX_VERTICES + i)
+
+            }
+            cost = Math.abs(Math.abs(angle) - 90)
+            if (cost < angle_tolerance) {
+                detected_constraints.push({ type: "horizontal", curve_idx, i })
+                segments_with_angle_constraints.add(curve_idx * NUM_MAX_VERTICES + i)
+            }
         }
     }
 
-    // detect angle constraints between pairs of segments
-    for (let i = 0; i < numVertices - 2; i++) {
-        for (let j = i + 1; j < numVertices - 1; j++) {
+    for (let curve_idx_1 = 0; curve_idx_1 < curves.length; curve_idx_1++) {
+        for (let curve_idx_2 = curve_idx_1; curve_idx_2 < curves.length; curve_idx_2++) {
+            curve_1 = curves[curve_idx_1];
+            const numVertices_1 = curve_1.length;
+            curve_2 = curves[curve_idx_2];
+            const numVertices_2 = curve_2.length;
 
-            if (segments_with_angle_constraints.has(i) && segments_with_angle_constraints.has(j)) {
-                continue
+            // detect angle constraints between pairs of segments
+            for (let i = 0; i < numVertices_1 - 1; i++) {
+                for (let j = i + 1; j < numVertices_2 - 1; j++) {
+                    if ((curve_idx_1 == curve_idx_2) && (i == j)) {
+                        continue;
+                    }
+
+                    if (segments_with_angle_constraints.has(curve_idx_1 * NUM_MAX_VERTICES + i) && segments_with_angle_constraints.has(curve_idx_2 * NUM_MAX_VERTICES + j)) {
+                        continue;
+                    }
+                    const segment_1 = [curve_1[i], curve_1[i + 1]];
+                    const segment_2 = [curve_2[j], curve_2[j + 1]];
+
+                    angle = calculateAngleBetweenSegments(segment_1, segment_2)
+
+                    cost = Math.min(Math.abs(angle), Math.abs(angle - 180)) / angle_tolerance
+                    if (cost < 1) {
+                        detected_constraints.push({ type: "parallel", curve_idx_1, curve_idx_2, i, j })
+                        segments_with_angle_constraints.add(i)
+                        segments_with_angle_constraints.add(j)
+                    }
+                    cost = Math.abs(Math.abs(angle) - 90) / angle_tolerance
+                    if (cost < 1) {
+                        detected_constraints.push({ type: "orthogonal", curve_idx_1, curve_idx_2, i, j })
+                        segments_with_angle_constraints.add(curve_idx_1 * NUM_MAX_VERTICES + i)
+                        segments_with_angle_constraints.add(curve_idx_2 * NUM_MAX_VERTICES + j)
+                    }
+                }
             }
-            const segment_1 = [polygon[i], polygon[i + 1]];
-            const segment_2 = [polygon[j], polygon[j + 1]];
-
-            angle = calculateAngleBetweenSegments(segment_1, segment_2)
-
-            cost = Math.min(Math.abs(angle), Math.abs(angle - 180)) / angle_tolerance
-            if (cost < 1) {
-                detected_constraints.push({ type: "parallel", cost, i, j })
-                segments_with_angle_constraints.add(i)
-                segments_with_angle_constraints.add(j)
-            }
-            cost = Math.abs(Math.abs(angle) - 90)
-            if (cost < 1) {
-                detected_constraints.push({ type: "orthogonal", cost, i, j })
-                segments_with_angle_constraints.add(i)
-                segments_with_angle_constraints.add(j)
-            }
-
-
         }
     }
     // detect length constraints between pairs of segments
     segments_with_length_constraints = new Set();
-    for (let i = 0; i < numVertices - 2; i++) {
-        for (let j = i + 1; j < numVertices - 1; j++) {
-            if (segments_with_length_constraints.has(i) && segments_with_length_constraints.has(j)) {
-                continue
-            }
-            d1 = calculatePointToPointDistance(polygon[i], polygon[i + 1])
-            d2 = calculatePointToPointDistance(polygon[j], polygon[j + 1])
-            cost = Math.abs(Math.abs(d1 - d2)) / distance_tolerance
-            if (cost < 1) {
-                detected_constraints.push({ type: "equal_length", cost, i, j })
-                segments_with_length_constraints.add(i)
-                segments_with_length_constraints.add(j)
+    for (let curve_idx_1 = 0; curve_idx_1 < curves.length; curve_idx_1++) {
+        for (let curve_idx_2 = curve_idx_1; curve_idx_2 < curves.length; curve_idx_2++) {
+            curve_1 = curves[curve_idx_1];
+            const numVertices_1 = curve_1.length;
+            curve_2 = curves[curve_idx_2];
+            const numVertices_2 = curve_2.length;
+            
+            for (let i = 0; i < numVertices_1 - 1; i++) {
+                for (let j = 0; j < numVertices_2 - 1; j++) {
+                    if ((curve_idx_1 == curve_idx_2) && (i >= j)) {
+                        continue;
+                    }
+                    if (segments_with_length_constraints.has(curve_idx_1 * NUM_MAX_VERTICES + i) && segments_with_length_constraints.has(curve_idx_2 * NUM_MAX_VERTICES + j)) {
+                        continue
+                    }
+                    d1 = calculatePointToPointDistance(curve_1[i], curve_1[i + 1])
+                    d2 = calculatePointToPointDistance(curve_2[j], curve_2[j + 1])
+                    cost = Math.abs(2 * Math.abs(d1 - d2) / (d1 + d2)) / relative_distance_tolerance
+                    if (cost < 1) {
+                        detected_constraints.push({ type: "equal_length", curve_idx_1, curve_idx_2, i, j })
+                        segments_with_length_constraints.add(curve_idx_1 * NUM_MAX_VERTICES + i)
+                        segments_with_length_constraints.add(curve_idx_2 * NUM_MAX_VERTICES + j)
+                    }
+                }
             }
         }
     }
 
     // detect point to point contact constrains
     point_point_contacts = new Set();
-    for (let i = 0; i < numVertices; i++) {
-        for (let j = i + 1; j < numVertices; j++) {
-            {
-                distance = calculatePointToPointDistance(polygon[i], polygon[j])
-                cost = distance / distance_tolerance
-                if (cost < 1) {
-                    detected_constraints.push({ type: "point_point_contact", cost, i, j })
-                    point_point_contacts.add((i, j))
+    for (let curve_idx_1 = 0; curve_idx_1 < curves.length; curve_idx_1++) {
+        for (let curve_idx_2 = curve_idx_1 ; curve_idx_2 < curves.length; curve_idx_2++) {
+            curve_1 = curves[curve_idx_1];
+            const numVertices_1 = curve_1.length;
+            curve_2 = curves[curve_idx_2];
+            const numVertices_2 = curve_2.length;
+
+
+            for (let i = 0; i < numVertices_1; i++) {
+                for (let j = 0; j < numVertices_2; j++) {
+                    {
+                        if ((curve_idx_1 == curve_idx_2) && (i >= j)) {
+                            continue;
+                        }
+                        distance = calculatePointToPointDistance(curve_1[i], curve_2[j])
+                        cost = distance / distance_tolerance
+                        if (cost < 1) {
+                            detected_constraints.push({ type: "point_point_contact", curve_idx_1, curve_idx_2, i, j })
+                            point_point_contacts.add(`${curve_idx_1}, ${curve_idx_2}, ${i}, ${j}`)
+                        }
+                    }
                 }
             }
         }
     }
 
     // detect point to line contact constrains
-    for (let i = 0; i < numVertices; i++) {
-        for (let j = 0; j < numVertices - 1; j++) {
-            if ((i == j) || (i == j + 1)) {
-                continue
-            }
-            if ((point_point_contacts.has((i, j))) || (point_point_contacts.has((i, j + 1))) || (point_point_contacts.has((j, i))) || (point_point_contacts.has((j+1, i )))) {
-                continue
-            }
+    for (let curve_idx_1 = 0; curve_idx_1 < curves.length; curve_idx_1++) {
+        for (let curve_idx_2 = 0; curve_idx_2 < curves.length; curve_idx_2++) {
+            curve_1 = curves[curve_idx_1];
+            const numVertices_1 = curve_1.length;
+            curve_2 = curves[curve_idx_2];
+            const numVertices_2 = curve_2.length;
+            for (let i = 0; i < numVertices_1; i++) {
+                for (let j = 0; j < numVertices_2 - 1; j++) {
+                    if ((curve_idx_1 == curve_idx_2) && ((i == j) || (i == j + 1)) ){
+                        continue
+                    }
+                    if ((point_point_contacts.has(`${curve_idx_1}, ${curve_idx_2}, ${i}, ${j}`)) || (point_point_contacts.has(`${curve_idx_1}, ${curve_idx_2}, ${i}, ${j + 1}`)) || (point_point_contacts.has((`${curve_idx_2}, ${curve_idx_1}, ${j}, ${i}`))) || (point_point_contacts.has(`${curve_idx_2}, ${curve_idx_1}, ${j + 1}, ${i}`))) {
+                        continue
+                    }
 
-            distance = calculatePointToLineDistance(polygon[i], polygon[j], polygon[j + 1])
-            cost = distance / distance_tolerance
-            if (cost < 1) {
-                detected_constraints.push({ type: "point_line_contact", cost, i, j })
-            }
+                    distance = calculatePointToLineDistance(curve_1[i], curve_2[j], curve_2[j + 1])
+                    cost = distance / distance_tolerance
+                    if (cost < 1) {
+                        detected_constraints.push({ type: "point_line_contact", curve_idx_1, curve_idx_2, i, j })
+                    }
 
+                }
+            }
         }
     }
 
@@ -251,7 +300,7 @@ function detectConstraintsCandidates(polygon) {
 }
 
 
-function constraintsResiduals(polygon, constraints) {
+function constraintsResiduals(curves, constraints) {
     numconstraints = constraints.length
     residuals = []
     for (let constraint_idx = 0; constraint_idx < numconstraints; constraint_idx++) {
@@ -260,7 +309,9 @@ function constraintsResiduals(polygon, constraints) {
         switch (constraint.type) {
             case "vertical":
                 {
+                    const curve_idx = constraint.curve_idx;
                     const i = constraint.i
+                    polygon = curves[curve_idx];
                     const segment = [polygon[i], polygon[i + 1]];
                     angle = calculateAngleBetweenSegments(segment, vertical_vector);
                     cost = Math.min(Math.abs(angle), Math.abs(angle - 180));
@@ -268,6 +319,8 @@ function constraintsResiduals(polygon, constraints) {
                 break;
             case "horizontal":
                 {
+                    const curve_idx = constraint.curve_idx;
+                    polygon = curves[curve_idx];
                     const i = constraint.i
                     const segment = [polygon[i], polygon[i + 1]];
                     angle = calculateAngleBetweenSegments(segment, vertical_vector)
@@ -277,48 +330,68 @@ function constraintsResiduals(polygon, constraints) {
 
             case "parallel":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
                     const i = constraint.i
                     const j = constraint.j
-                    const segment_1 = [polygon[i], polygon[i + 1]];
-                    const segment_2 = [polygon[j], polygon[j + 1]];
+                    const segment_1 = [curve_1[i], curve_1[i + 1]];
+                    const segment_2 = [curve_2[j], curve_2[j + 1]];
                     angle = calculateAngleBetweenSegments(segment_1, segment_2)
                     cost = Math.min(Math.abs(angle), Math.abs(angle - 180)) / angle_tolerance
                 }
                 break;
             case "orthogonal":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
                     const i = constraint.i
                     const j = constraint.j
-                    const segment_1 = [polygon[i], polygon[i + 1]];
-                    const segment_2 = [polygon[j], polygon[j + 1]];
+                    const segment_1 = [curve_1[i], curve_1[i + 1]];
+                    const segment_2 = [curve_2[j], curve_2[j + 1]];
                     angle = calculateAngleBetweenSegments(segment_1, segment_2)
                     cost = Math.abs(Math.abs(angle) - 90)
                 }
                 break;
             case "point_line_contact":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
                     const i = constraint.i
                     const j = constraint.j
-                    distance = calculatePointToLineDistance(polygon[i], polygon[j], polygon[j + 1])
+                    distance = calculatePointToLineDistance(curve_1[i], curve_2[j], curve_2[j + 1])
                     cost = distance / distance_tolerance
                 }
                 break;
 
             case "point_point_contact":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
                     const i = constraint.i
                     const j = constraint.j
-                    distance = calculatePointToPointDistance(polygon[i], polygon[j])
+                    distance = calculatePointToPointDistance(curve_1[i], curve_2[j])
                     cost = distance / distance_tolerance;
                 }
                 break;
 
             case "equal_length":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
                     const i = constraint.i
                     const j = constraint.j
-                    d1 = calculatePointToPointDistance(polygon[i], polygon[i + 1])
-                    d2 = calculatePointToPointDistance(polygon[j], polygon[j + 1])
+                    d1 = calculatePointToPointDistance(curve_1[i], curve_1[i + 1])
+                    d2 = calculatePointToPointDistance(curve_2[j], curve_2[j + 1])
                     cost = Math.abs(Math.abs(d1 - d2)) / distance_tolerance
                 }
                 break;
@@ -331,24 +404,40 @@ function constraintsResiduals(polygon, constraints) {
     return residuals
 }
 
-function enforceConstraints(polygon, constraints) {
+function enforceConstraints(constraints, curves) {
     //Possible Acceleration:
     //compute the jacobian of each constraint independently using only points that have an influence on the constraint
     //and then combine them. Use Gaussian BP for solving the sparse linear system?
 
-    const numVertices = polygon.length;
     points_vec = []
-    for (let i = 0; i < numVertices; i++) {
-        points_vec.push(polygon[i].x)
-        points_vec.push(polygon[i].y)
+    for (let curve_idx = 0; curve_idx < curves.length; curve_idx++) {
+        polygon = curves[curve_idx];
+        const numVertices = polygon.length;
+        for (let i = 0; i < numVertices; i++) {
+            points_vec.push(polygon[i].x)
+            points_vec.push(polygon[i].y)
+        }
+    }
+
+    const deserialize = p => {
+        new_curves = []
+        k = 0
+        for (let curve_idx = 0; curve_idx < curves.length; curve_idx++) {
+            polygon = curves[curve_idx];
+            const numVertices = polygon.length;
+            new_curve = [];
+            for (let i = 0; i < numVertices; i++) {
+                new_curve.push({ x: p[2 * k], y: p[2 * k + 1] })
+                k += 1;
+            }
+            new_curves.push(new_curve)
+        }
+        return new_curves
     }
     const residuals_fun = p => {
-        new_polygon = []
-        for (let i = 0; i < numVertices; i++) {
-            new_polygon.push({ x: p[2 * i], y: p[2 * i + 1] })
-        }
+        new_curves = deserialize(p)
         // Compute the residuals (distances) for each point
-        residuals = constraintsResiduals(new_polygon, constraints)
+        residuals = constraintsResiduals(new_curves, constraints)
         return residuals
     };
 
@@ -362,11 +451,8 @@ function enforceConstraints(polygon, constraints) {
     // Perform the optimization
 
     const result = levenbergMarquardt(residuals_fun, points_vec, options);
-    new_polygon = []
-    for (let i = 0; i < numVertices; i++) {
-        new_polygon.push({ x: result.x_opt[2 * i], y: result.x_opt[2 * i + 1] })
-    }
-    return new_polygon
+    new_curves = deserialize(result.x_opt)
+    return new_curves
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -404,6 +490,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // let radius = 200;
     let tolerance = 3;
     let activeCurve = 0
+    let useConstraints = true;
 
     canvas.style.cursor = "crosshair"
 
@@ -418,6 +505,11 @@ document.addEventListener("DOMContentLoaded", function () {
             addPoint(x, y);
         } else if ((e.button === 0 || e.touches) && showControlPoints) {  // Right mouse button and control points are visible
             // Find the nearest control point
+            if (e.ctrlKey) {
+                useConstraints = false
+            } else {
+                useConstraints = true;
+            }
             isEditing = true
             selectedControlPoint = findNearestControlPoint(x, y);
             activeCurve = selectedControlPoint.curve_idx
@@ -494,15 +586,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function highlightConstraint(index) {
-        constraint = currentConstraints[index]
-        curve = curves[activeCurve]
-        color = colors[activeCurve]
-        radius = radii[activeCurve]
+        constraint = constraints[index]
 
+        radius = 2;
 
         switch (constraint.type) {
             case "vertical":
                 {
+                    const curve_idx = constraint.curve_idx;
+                    curve = curves[curve_idx];
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
@@ -513,6 +605,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             case "horizontal":
                 {
+                    const curve_idx = constraint.curve_idx;
+                    curve = curves[curve_idx];
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
@@ -524,39 +618,59 @@ document.addEventListener("DOMContentLoaded", function () {
 
             case "parallel":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
+                    const i = constraint.i
+                    const j = constraint.j
+
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
-                    context.moveTo(curve[constraint.i].x, curve[constraint.i].y);
-                    context.lineTo(curve[constraint.i + 1].x, curve[constraint.i + 1].y);
-                    context.moveTo(curve[constraint.j].x, curve[constraint.j].y);
-                    context.lineTo(curve[constraint.j + 1].x, curve[constraint.j + 1].y);
+                    context.moveTo(curve_1[i].x, curve_1[i].y);
+                    context.lineTo(curve_1[i + 1].x, curve_1[i + 1].y);
+                    context.moveTo(curve_2[j].x, curve_2[j].y);
+                    context.lineTo(curve_2[j + 1].x, curve_2[j + 1].y);
                     context.stroke();
                 }
                 break;
             case "orthogonal":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
+                    const i = constraint.i
+                    const j = constraint.j
+
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
-                    context.moveTo(curve[constraint.i].x, curve[constraint.i].y);
-                    context.lineTo(curve[constraint.i + 1].x, curve[constraint.i + 1].y);
-                    context.moveTo(curve[constraint.j].x, curve[constraint.j].y);
-                    context.lineTo(curve[constraint.j + 1].x, curve[constraint.j + 1].y);
+                    context.moveTo(curve_1[i].x, curve_1[i].y);
+                    context.lineTo(curve_1[i + 1].x, curve_1[i + 1].y);
+                    context.moveTo(curve_2[j].x, curve_2[j].y);
+                    context.lineTo(curve_2[j + 1].x, curve_2[j + 1].y);
                     context.stroke();
                 }
                 break;
             case "point_line_contact":
                 {
-                    
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
+                    const i = constraint.i
+                    const j = constraint.j
+
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
-                    context.moveTo(curve[constraint.j].x, curve[constraint.j].y);
-                    context.lineTo(curve[constraint.j + 1].x, curve[constraint.j + 1].y);
+                    context.moveTo(curve_2[j].x, curve_2[j].y);
+                    context.lineTo(curve_2[j + 1].x, curve_2[j + 1].y);
                     context.stroke();
                     context.beginPath();
-                    context.arc(curve[constraint.i].x, curve[constraint.i].y, radius, 0, 2 * Math.PI);
+                    context.arc(curve_1[i].x, curve_1[i].y, radius, 0, 2 * Math.PI);
                     context.fill();
                     context.stroke();
 
@@ -565,12 +679,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
             case "point_point_contact":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
+                    const i = constraint.i
+                    const j = constraint.j
+
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
-                    context.arc(curve[constraint.i].x, curve[constraint.i].y, radius, 0, 2 * Math.PI);
+                    context.arc(curve_1[i].x, curve_1[i].y, radius, 0, 2 * Math.PI);
                     context.lineWidth = radius * 2;
-                    context.arc(curve[constraint.j].x, curve[constraint.j].y, radius, 0, 2 * Math.PI);
+                    context.arc(curve_2[j].x, curve_2[j].y, radius, 0, 2 * Math.PI);
                     context.fill();
                     context.stroke();
                 }
@@ -578,13 +699,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
             case "equal_length":
                 {
+                    const curve_idx_1 = constraint.curve_idx_1;
+                    curve_1 = curves[curve_idx_1];
+                    const curve_idx_2 = constraint.curve_idx_2;
+                    curve_2 = curves[curve_idx_2];
+                    const i = constraint.i
+                    const j = constraint.j
+
                     context.beginPath();
                     context.strokeStyle = "red";
                     context.lineWidth = radius * 2;
-                    context.moveTo(curve[constraint.i].x, curve[constraint.i].y);
-                    context.lineTo(curve[constraint.i + 1].x, curve[constraint.i + 1].y);
-                    context.moveTo(curve[constraint.j].x, curve[constraint.j].y);
-                    context.lineTo(curve[constraint.j + 1].x, curve[constraint.j + 1].y);
+                    context.moveTo(curve_1[i].x, curve_1[i].y);
+                    context.lineTo(curve_1[i + 1].x, curve_1[i + 1].y);
+                    context.moveTo(curve_2[j].x, curve_2[j].y);
+                    context.lineTo(curve_2[j + 1].x, curve_2[j + 1].y);
                     context.stroke();
                 }
                 break;
@@ -599,14 +727,14 @@ document.addEventListener("DOMContentLoaded", function () {
         //constraintsList.empty();
         constraintsList.innerHTML = "";
 
-        currentConstraints.forEach((constraint, index) => {
+        constraints.forEach((constraint, index) => {
             const listItem = document.createElement('li');
             listItem.classList.add('constraint-item');
             if (typeof constraint.j !== 'undefined') {
-                listItem.textContent = `${constraint.type}(${constraint.i},${constraint.j})`;
+                listItem.textContent = `${constraint.type}(${constraint.curve_idx_1}, ${constraint.i},${constraint.curve_idx_2}, ${constraint.j})`;
             }
             else {
-                listItem.textContent = `${constraint.type}(${constraint.i})`
+                listItem.textContent = `${constraint.type}(${constraint.curve_idx}, ${constraint.i})`
             }
             listItem.addEventListener('mouseover', () => highlightConstraint(index));
             listItem.addEventListener('mouseout', () => draw());
@@ -681,8 +809,11 @@ document.addEventListener("DOMContentLoaded", function () {
         point.y = y
         currentConstraints = constraints[selectedControlPoint.curve_idx]
         curves[selectedControlPoint.curve_idx][selectedControlPoint.point_idx] = point
-        curves[selectedControlPoint.curve_idx] = enforceConstraints(curves[selectedControlPoint.curve_idx], currentConstraints)
-        displayCurrentConstraints()
+        if (useConstraints) {
+            curves = enforceConstraints(constraints, curves)
+        }
+
+        //displayCurrentConstraints()
         draw();
     }
 
@@ -697,15 +828,13 @@ document.addEventListener("DOMContentLoaded", function () {
         //console.log(circle);
         // console.log(centerX);
         currentCurve = simplify(currentCurve, tolerance, highestQuality)
-        currentConstraints = detectConstraintsCandidates(currentCurve)
-        currentCurve = enforceConstraints(currentCurve, currentConstraints)
-        currentCurve = simplify(currentCurve, tolerance, highestQuality)
-        currentConstraints = detectConstraintsCandidates(currentCurve)
-        currentCurve = enforceConstraints(currentCurve, currentConstraints)
+        //currentConstraints = detectConstraintsCandidates(currentCurve)
+        //currentCurve = enforceConstraints(currentCurve, currentConstraints)
+        //currentCurve = simplify(currentCurve, tolerance, highestQuality)
+        //currentConstraints = detectConstraintsCandidates(currentCurve)
+        //currentCurve = enforceConstraints(currentCurve, currentConstraints)
 
         activeCurve = curves.length
-        displayCurrentConstraints()
-
 
 
         console.log(currentConstraints)
@@ -713,9 +842,21 @@ document.addEventListener("DOMContentLoaded", function () {
             curves.push(currentCurve);
             colors.push(currentColor);
             radii.push(currentRadius);
-            constraints.push(currentConstraints)
+
             currentCurve = [];
         }
+        draw();
+        constraints = detectConstraintsCandidates(curves);
+        displayCurrentConstraints();
+        curves = enforceConstraints(constraints, curves);
+
+        currentCurve = curves[curves.length - 1];
+        currentCurve = simplify(currentCurve, tolerance, highestQuality);
+        curves[curves.length - 1] = currentCurve;
+
+        constraints = detectConstraintsCandidates(curves);
+        displayCurrentConstraints();
+        curves = enforceConstraints(constraints, curves);
         draw();
     }
 
@@ -729,10 +870,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
         currentCurve = curves[selectedControlPoint.curve_idx];
         currentCurve = simplify(currentCurve, tolerance, highestQuality);
-        currentConstraints = detectConstraintsCandidates(currentCurve);
-        currentCurve = enforceConstraints(currentCurve, currentConstraints);
         curves[selectedControlPoint.curve_idx] = currentCurve;
-        constraints[selectedControlPoint.curve_idx] = currentConstraints;
+        constraints = detectConstraintsCandidates(curves);
+        curves = enforceConstraints(constraints, curves);
         displayCurrentConstraints()
         draw()
     }
@@ -801,12 +941,11 @@ document.addEventListener("DOMContentLoaded", function () {
     canvas.addEventListener("touchstart", startDrawing);
     canvas.addEventListener("touchend", function (e) {
         if (e.touches.length === 0) {  // No more touches
-            if (isDrawing){
-            stopDrawing();
+            if (isDrawing) {
+                stopDrawing();
             }
-            else if (isEditing)
-            {
-            stopEditing();
+            else if (isEditing) {
+                stopEditing();
             }
         }
     });
