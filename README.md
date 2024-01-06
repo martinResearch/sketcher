@@ -1,5 +1,6 @@
 # Sketcher
 
+A minimalist 2D vector drawing app with automatic geometric constraints detection.
 try it [here](https://martinresearch.github.io/sketcher/)
 
 ## Inspirations
