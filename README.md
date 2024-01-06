@@ -10,6 +10,7 @@ try it [here](https://martinresearch.github.io/sketcher/)
 
 ## TODO
 
+* add polygon tool beside free drawing, where the user click on the polygon corners
 * add the possibility to undo the last actions.
 * add colinear line segments constraints.
 * use a smaller tolerance for the point-on-line constraint detection.
