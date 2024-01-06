@@ -20,4 +20,7 @@ try it [here](https://martinresearch.github.io/sketcher/)
 * add the possibility to add constraints manually like in [here](https://github.com/AntonEvmenenko/2d_geometric_constraint_solver).
 * fix the SVG export.
 * accelerate the geometric constraints solver by using the Jacobian sparsity when computing the jacobian with finite differences. We could compute the jacobian of each constraint independently.
-* use the jacobian sparsity when solving the linear system in Levenberg-Marquardt. We could use the conjugate gradient algorithm or a gaussian message passing solver.
+* use the jacobian sparsity when solving the linear system in Levenberg-Marquardt. We could use the conjugate gradient algorithm or a gaussian message passing linear system solver.
+* add circle arc detection and corresponding constraint (tangency, concentricity).
+* add detection of basic shapes (square, parallelogram, circle, ellipse, arrow etc).
+* add symmetry detection.
